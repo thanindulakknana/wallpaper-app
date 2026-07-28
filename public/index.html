@@ -7,24 +7,48 @@
     <style>
         body { font-family: Arial, sans-serif; background: #121212; color: white; padding: 20px; }
         .container { max-width: 1200px; margin: 0 auto; }
-        .search-box { display: flex; gap: 10px; margin-bottom: 30px; }
-        input { flex: 1; padding: 15px; border: none; border-radius: 8px; font-size: 16px; }
+        .search-box { display: flex; gap: 10px; margin-bottom: 30px; flex-wrap: wrap; }
+        input { flex: 1; padding: 15px; border: none; border-radius: 8px; font-size: 16px; min-width: 200px; }
         button { padding: 15px 30px; background: #4CAF50; color: white; border: none; border-radius: 8px; font-size: 16px; cursor: pointer; }
+        button:hover { background: #45a049; }
         .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 15px; }
-        .card { background: #1e1e1e; border-radius: 10px; overflow: hidden; text-align: center; }
-        .card img { width: 100%; height: 200px; object-fit: cover; }
-        .card p { padding: 10px; font-size: 14px; color: #aaa; }
-        .resolution-badge { background: #333; padding: 5px 10px; border-radius: 20px; font-size: 12px; }
+        .card { background: #1e1e1e; border-radius: 10px; overflow: hidden; text-align: center; position: relative; }
+        .card img { width: 100%; height: 200px; object-fit: cover; cursor: pointer; transition: transform 0.2s; }
+        .card img:hover { transform: scale(1.02); }
+        .card p { padding: 10px; font-size: 14px; color: #aaa; margin: 0; }
+        .card .download-btn {
+            display: inline-block;
+            margin: 10px 0 15px 0;
+            padding: 8px 20px;
+            background: #0070f3;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            text-decoration: none;
+        }
+        .card .download-btn:hover { background: #005bb5; }
+        .resolution-badge { background: #333; padding: 5px 10px; border-radius: 20px; font-size: 12px; display: inline-block; margin-top: 5px; }
         .status { margin-top: 20px; text-align: center; }
+        .resolution-info { background: #1a1a2e; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #4CAF50; }
+        .resolution-info strong { color: #4CAF50; }
+        .loading { color: #ffa500; }
+        .error { color: #ff4444; }
+        .success { color: #4CAF50; }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>🖥️ Smart Wallpaper Finder</h1>
-        <p>Detected Screen: <span id="detectedResolution">Loading...</span></p>
+        
+        <!-- ✅ Resolution display - This is what shows your screen size -->
+        <div class="resolution-info">
+            📱 <strong>Detected Screen Resolution:</strong> <span id="detectedResolution">Loading...</span>
+        </div>
         
         <div class="search-box">
-            <input type="text" id="searchInput" placeholder="e.g., mountains, sunset, abstract, cars..." />
+            <input type="text" id="searchInput" placeholder="Search wallpapers... (e.g., mountains, sunset, abstract)" />
             <button onclick="performSearch()">🔍 Search</button>
         </div>
 
@@ -33,16 +57,28 @@
     </div>
 
     <script>
-        // Detect the user's true screen resolution
-        const screenWidth = screen.width;
-        const screenHeight = screen.height;
-        const pixelRatio = window.devicePixelRatio || 1;
-        const effectiveWidth = Math.round(screenWidth * pixelRatio);
-        const effectiveHeight = Math.round(screenHeight * pixelRatio);
+        // ✅ SCREEN RESOLUTION DETECTION - Runs as soon as the page loads
+        (function detectScreen() {
+            const screenWidth = screen.width;
+            const screenHeight = screen.height;
+            const pixelRatio = window.devicePixelRatio || 1;
+            const effectiveWidth = Math.round(screenWidth * pixelRatio);
+            const effectiveHeight = Math.round(screenHeight * pixelRatio);
 
-        document.getElementById('detectedResolution').innerText = 
-            `${effectiveWidth} x ${effectiveHeight} (Physical: ${screenWidth}x${screenHeight}, DPR: ${pixelRatio})`;
+            const displayElement = document.getElementById('detectedResolution');
+            if (displayElement) {
+                displayElement.innerText = 
+                    `${effectiveWidth} × ${effectiveHeight} pixels (Physical: ${screenWidth}×${screenHeight}, DPR: ${pixelRatio}x)`;
+            } else {
+                console.warn('Element "detectedResolution" not found in HTML');
+            }
 
+            // Store in global variables so the search function can use them
+            window.SCREEN_WIDTH = effectiveWidth;
+            window.SCREEN_HEIGHT = effectiveHeight;
+        })();
+
+        // ✅ SEARCH FUNCTION
         async function performSearch() {
             const query = document.getElementById('searchInput').value.trim();
             if (!query) {
@@ -53,45 +89,58 @@
             const resultsContainer = document.getElementById('results');
             const statusMsg = document.getElementById('statusMessage');
             resultsContainer.innerHTML = '';
-            statusMsg.innerText = '⏳ Searching for wallpapers that fit your screen...';
+            statusMsg.innerHTML = '⏳ Searching for wallpapers that fit your screen...';
+            statusMsg.className = 'status loading';
 
             try {
+                // Use the detected resolution from the global variables
+                const width = window.SCREEN_WIDTH || screen.width * (window.devicePixelRatio || 1);
+                const height = window.SCREEN_HEIGHT || screen.height * (window.devicePixelRatio || 1);
+
                 const response = await fetch(
-                    `/api/search?query=${encodeURIComponent(query)}&screenWidth=${effectiveWidth}&screenHeight=${effectiveHeight}`
+                    `/api/search?query=${encodeURIComponent(query)}&screenWidth=${Math.round(width)}&screenHeight=${Math.round(height)}`
                 );
                 const data = await response.json();
 
                 if (data.error) {
-                    statusMsg.innerText = '❌ Error: ' + data.error;
+                    statusMsg.innerHTML = '❌ Error: ' + data.error;
+                    statusMsg.className = 'status error';
                     return;
                 }
 
                 if (data.wallpapers.length === 0) {
-                    statusMsg.innerText = `😕 No wallpapers found that are larger than ${effectiveWidth}x${effectiveHeight}. Try a broader search.`;
+                    statusMsg.innerHTML = `😕 No wallpapers found that fit your screen. Try a broader search.`;
+                    statusMsg.className = 'status error';
                     return;
                 }
 
-                statusMsg.innerText = `✅ Found ${data.total} matching wallpapers. Showing ${data.wallpapers.length}.`;
+                statusMsg.innerHTML = `✅ Found ${data.total} matching wallpapers. Showing ${data.wallpapers.length}.`;
+                statusMsg.className = 'status success';
 
                 data.wallpapers.forEach(img => {
                     const card = document.createElement('div');
                     card.className = 'card';
+                    
+                    // ✅ Create the image and download button
                     card.innerHTML = `
-                        <img src="${img.webformatURL}" alt="${img.tags}" loading="lazy" />
+                        <img src="${img.webformatURL}" alt="${img.tags}" loading="lazy" onclick="window.open('${img.webformatURL}', '_blank')" />
                         <p>
-                            <span class="resolution-badge">${img.imageWidth} x ${img.imageHeight}</span>
-                            <br />❤️ ${img.likes} | 👁️ ${img.views}
+                            <span class="resolution-badge">📐 ${img.imageWidth} × ${img.imageHeight}</span>
+                            <br />❤️ ${img.likes} | 👁️ ${img.views} | ⬇️ ${img.downloads || 0}
                         </p>
+                        <a href="${img.webformatURL}" download target="_blank" class="download-btn">⬇️ Download Wallpaper</a>
                     `;
                     resultsContainer.appendChild(card);
                 });
 
             } catch (error) {
-                statusMsg.innerText = '❌ Cannot connect to server. Make sure it is running.';
-                console.error(error);
+                statusMsg.innerHTML = '❌ Cannot connect to server. Please try again.';
+                statusMsg.className = 'status error';
+                console.error('Search error:', error);
             }
         }
 
+        // Allow pressing "Enter" in the search box
         document.getElementById('searchInput').addEventListener('keypress', function(e) {
             if (e.key === 'Enter') performSearch();
         });
