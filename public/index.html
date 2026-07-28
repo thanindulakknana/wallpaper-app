@@ -82,12 +82,25 @@
             max-height: 30px;
             overflow: hidden;
         }
-        .no-results {
-            text-align: center;
-            padding: 50px 20px;
-            color: #888;
+        .load-more-btn {
+            display: block;
+            margin: 30px auto;
+            padding: 15px 40px;
+            background: #0070f3;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
         }
-        .no-results h3 { color: #fff; }
+        .load-more-btn:hover { background: #005bb5; }
+        .load-more-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .stats {
+            text-align: center;
+            color: #888;
+            margin: 10px 0;
+            font-size: 14px;
+        }
     </style>
 </head>
 <body>
@@ -117,54 +130,36 @@
             <span onclick="setSearch('nissan skyline r34 gtr')">🏎️ Nissan GTR</span>
         </div>
 
+        <div id="stats" class="stats"></div>
         <div id="results" class="grid"></div>
+        <button id="loadMoreBtn" class="load-more-btn" style="display:none;" onclick="loadMore()">Load More Results</button>
         <p id="statusMessage" class="status"></p>
     </div>
 
     <script>
         console.log("✅ Smart Wallpaper Finder loaded");
 
+        // Global variables
+        let currentQuery = '';
+        let currentPage = 1;
+        let totalResults = 0;
+        let isLoading = false;
+        let hasMore = false;
+
         // ============================================
-        // SCREEN DETECTION (FIXED)
+        // SCREEN DETECTION
         // ============================================
         function detectScreen() {
-            console.log("📱 Detecting screen...");
-            
             const screenWidth = screen.width;
             const screenHeight = screen.height;
             
-            // Use the actual screen resolution (no scaling adjustments)
-            // This gets the TRUE physical resolution
             let effectiveWidth = screenWidth;
             let effectiveHeight = screenHeight;
             
-            // If Windows scaling is causing issues, let user fix it manually
-            // Show warning if resolution seems unusual
-            const commonResolutions = [
-                [1920, 1080], [1600, 900], [1366, 768], [1280, 720],
-                [3840, 2160], [2560, 1440], [3440, 1440], [1680, 1050]
-            ];
-            
-            let isCommon = false;
-            for (let i = 0; i < commonResolutions.length; i++) {
-                if (screenWidth === commonResolutions[i][0] && screenHeight === commonResolutions[i][1]) {
-                    isCommon = true;
-                    break;
-                }
-            }
-            
-            if (!isCommon) {
-                document.getElementById('resolutionWarning').style.display = 'block';
-                document.getElementById('resolutionWarning').innerHTML = 
-                    `⚠️ Unusual resolution detected (${screenWidth}×${screenHeight}). Please use the manual override above if this is incorrect.`;
-            }
-            
-            // Store in global variables
             window.SCREEN_WIDTH = effectiveWidth;
             window.SCREEN_HEIGHT = effectiveHeight;
             window.RESOLUTION_OVERRIDE = false;
             
-            // Update display
             document.getElementById('detectedResolution').innerHTML = 
                 `<strong>${effectiveWidth} × ${effectiveHeight}</strong> pixels`;
             
@@ -176,8 +171,6 @@
         // MANUAL RESOLUTION OVERRIDE
         // ============================================
         function manualResolution() {
-            console.log("📝 Manual override triggered");
-            
             const width = prompt("Enter your actual screen width (e.g., 1600):");
             if (!width) return;
             const height = prompt("Enter your actual screen height (e.g., 900):");
@@ -199,14 +192,11 @@
                 `<strong>${w} × ${h}</strong> <span style="color:#ffa500;">(Manual override)</span>`;
             document.getElementById('resolutionWarning').style.display = 'none';
             
-            console.log(`✅ Manual override: ${w}×${h}`);
-            
             const searchInput = document.getElementById('searchInput');
             if (searchInput.value.trim()) {
                 performSearch();
             } else {
                 searchInput.focus();
-                searchInput.placeholder = "Now search for wallpapers!";
             }
         }
 
@@ -219,7 +209,7 @@
         }
 
         // ============================================
-        // SEARCH FUNCTION (IMPROVED)
+        // SEARCH FUNCTION (SHOWS ALL RESULTS)
         // ============================================
         async function performSearch() {
             const query = document.getElementById('searchInput').value.trim();
@@ -228,23 +218,27 @@
                 return;
             }
 
-            console.log(`🔍 Searching for: "${query}"`);
-
+            // Reset pagination
+            currentQuery = query;
+            currentPage = 1;
+            
             const resultsContainer = document.getElementById('results');
             const statusMsg = document.getElementById('statusMessage');
+            const statsDiv = document.getElementById('stats');
+            const loadMoreBtn = document.getElementById('loadMoreBtn');
             
             resultsContainer.innerHTML = '';
+            statsDiv.innerHTML = '';
+            loadMoreBtn.style.display = 'none';
             statusMsg.innerHTML = '⏳ Searching for wallpapers...';
             statusMsg.className = 'status loading';
 
             try {
                 const width = window.SCREEN_WIDTH || screen.width;
                 const height = window.SCREEN_HEIGHT || screen.height;
-                
-                console.log(`📐 Using resolution: ${width}×${height}`);
 
                 const response = await fetch(
-                    `/api/search?query=${encodeURIComponent(query)}&screenWidth=${width}&screenHeight=${height}`
+                    `/api/search?query=${encodeURIComponent(query)}&screenWidth=${width}&screenHeight=${height}&page=${currentPage}`
                 );
                 const data = await response.json();
 
@@ -260,63 +254,22 @@
                     return;
                 }
 
+                totalResults = data.total || data.wallpapers.length;
+                hasMore = data.hasMore || false;
+                
+                statsDiv.innerHTML = `📊 Found ${data.total} total wallpapers. Showing ${data.wallpapers.length} results.`;
                 statusMsg.innerHTML = `✅ Found ${data.wallpapers.length} wallpapers for "${query}"`;
                 statusMsg.className = 'status success';
 
-                // Display results
-                data.wallpapers.forEach(img => {
-                    const card = document.createElement('div');
-                    card.className = 'card';
-                    
-                    // ============================================
-                    // FIXED: Match quality based on ASPECT RATIO
-                    // ============================================
-                    const userAspectRatio = width / height;
-                    const imgAspectRatio = img.imageWidth / img.imageHeight;
-                    const aspectDiff = Math.abs(imgAspectRatio - userAspectRatio) / userAspectRatio;
-                    
-                    // Resolution difference for display only
-                    const widthDiff = Math.abs(img.imageWidth - width);
-                    const heightDiff = Math.abs(img.imageHeight - height);
-                    
-                    let matchLabel = '';
-                    let matchClass = '';
-                    
-                    // Score based on aspect ratio match (most important)
-                    if (aspectDiff < 0.01) {
-                        matchLabel = '⭐ Perfect 16:9!';
-                        matchClass = 'match-excellent';
-                    } else if (aspectDiff < 0.03) {
-                        matchLabel = '✅ Very Close';
-                        matchClass = 'match-excellent';
-                    } else if (aspectDiff < 0.05) {
-                        matchLabel = '👍 Good Match';
-                        matchClass = 'match-good';
-                    } else if (aspectDiff < 0.10) {
-                        matchLabel = '📏 Acceptable';
-                        matchClass = 'match-fair';
-                    } else {
-                        matchLabel = '❌ Wrong Ratio';
-                        matchClass = 'match-fair';
-                    }
-                    
-                    // Show tags (what the image is actually tagged as)
-                    const tags = img.tags ? img.tags.split(', ').slice(0, 5).join(', ') : 'No tags';
-                    
-                    card.innerHTML = `
-                        <img src="${img.webformatURL}" alt="${img.tags}" loading="lazy" 
-                             onclick="window.open('${img.webformatURL}', '_blank')" 
-                             title="Click to open full size" />
-                        <p>
-                            <span class="resolution-badge">📐 ${img.imageWidth} × ${img.imageHeight}</span>
-                            <span class="match-badge ${matchClass}">${matchLabel}</span>
-                            <br />❤️ ${img.likes} | 👁️ ${img.views} | ⬇️ ${img.downloads || 0}
-                            <br /><span class="match-info">Tags: ${tags}</span>
-                        </p>
-                        <a href="${img.webformatURL}" download target="_blank" class="download-btn">⬇️ Download Wallpaper</a>
-                    `;
-                    resultsContainer.appendChild(card);
-                });
+                displayWallpapers(data.wallpapers);
+
+                // Show "Load More" button if there are more results
+                if (hasMore && data.wallpapers.length >= 200) {
+                    loadMoreBtn.style.display = 'block';
+                    loadMoreBtn.disabled = false;
+                } else {
+                    loadMoreBtn.style.display = 'none';
+                }
 
                 console.log(`✅ Displayed ${data.wallpapers.length} results`);
 
@@ -328,22 +281,121 @@
         }
 
         // ============================================
+        // DISPLAY WALLPAPERS
+        // ============================================
+        function displayWallpapers(wallpapers) {
+            const resultsContainer = document.getElementById('results');
+            const width = window.SCREEN_WIDTH || screen.width;
+            const height = window.SCREEN_HEIGHT || screen.height;
+            const userAspectRatio = width / height;
+
+            wallpapers.forEach(img => {
+                const card = document.createElement('div');
+                card.className = 'card';
+                
+                // Match quality based on ASPECT RATIO
+                const imgAspectRatio = img.imageWidth / img.imageHeight;
+                const aspectDiff = Math.abs(imgAspectRatio - userAspectRatio) / userAspectRatio;
+                
+                let matchLabel = '';
+                let matchClass = '';
+                
+                if (aspectDiff < 0.01) {
+                    matchLabel = '⭐ Perfect 16:9!';
+                    matchClass = 'match-excellent';
+                } else if (aspectDiff < 0.03) {
+                    matchLabel = '✅ Very Close';
+                    matchClass = 'match-excellent';
+                } else if (aspectDiff < 0.05) {
+                    matchLabel = '👍 Good Match';
+                    matchClass = 'match-good';
+                } else if (aspectDiff < 0.10) {
+                    matchLabel = '📏 Acceptable';
+                    matchClass = 'match-fair';
+                } else {
+                    matchLabel = '❌ Wrong Ratio';
+                    matchClass = 'match-fair';
+                }
+                
+                const tags = img.tags ? img.tags.split(', ').slice(0, 5).join(', ') : 'No tags';
+                
+                card.innerHTML = `
+                    <img src="${img.webformatURL}" alt="${img.tags}" loading="lazy" 
+                         onclick="window.open('${img.webformatURL}', '_blank')" 
+                         title="Click to open full size" />
+                    <p>
+                        <span class="resolution-badge">📐 ${img.imageWidth} × ${img.imageHeight}</span>
+                        <span class="match-badge ${matchClass}">${matchLabel}</span>
+                        <br />❤️ ${img.likes} | 👁️ ${img.views} | ⬇️ ${img.downloads || 0}
+                        <br /><span class="match-info">Tags: ${tags}</span>
+                    </p>
+                    <a href="${img.webformatURL}" download target="_blank" class="download-btn">⬇️ Download Wallpaper</a>
+                `;
+                resultsContainer.appendChild(card);
+            });
+        }
+
+        // ============================================
+        // LOAD MORE RESULTS
+        // ============================================
+        async function loadMore() {
+            if (isLoading || !hasMore) return;
+            
+            isLoading = true;
+            currentPage++;
+            
+            const loadMoreBtn = document.getElementById('loadMoreBtn');
+            loadMoreBtn.disabled = true;
+            loadMoreBtn.textContent = '⏳ Loading more...';
+            
+            try {
+                const width = window.SCREEN_WIDTH || screen.width;
+                const height = window.SCREEN_HEIGHT || screen.height;
+
+                const response = await fetch(
+                    `/api/search?query=${encodeURIComponent(currentQuery)}&screenWidth=${width}&screenHeight=${height}&page=${currentPage}`
+                );
+                const data = await response.json();
+
+                if (data.wallpapers && data.wallpapers.length > 0) {
+                    displayWallpapers(data.wallpapers);
+                    hasMore = data.hasMore || false;
+                    
+                    document.getElementById('stats').innerHTML = 
+                        `📊 Found ${data.total} total wallpapers. Showing ${data.returned || data.wallpapers.length} results.`;
+                    
+                    if (hasMore && data.wallpapers.length >= 200) {
+                        loadMoreBtn.style.display = 'block';
+                        loadMoreBtn.disabled = false;
+                        loadMoreBtn.textContent = 'Load More Results';
+                    } else {
+                        loadMoreBtn.style.display = 'none';
+                        document.getElementById('stats').innerHTML += ' (All results loaded)';
+                    }
+                } else {
+                    loadMoreBtn.style.display = 'none';
+                    document.getElementById('stats').innerHTML += ' (No more results)';
+                }
+                
+            } catch (error) {
+                console.error('❌ Load more error:', error);
+                loadMoreBtn.textContent = 'Error loading. Try again.';
+                loadMoreBtn.disabled = false;
+            }
+            
+            isLoading = false;
+        }
+
+        // ============================================
         // RUN ON PAGE LOAD
         // ============================================
         window.addEventListener('DOMContentLoaded', function() {
-            console.log("📄 Page loaded");
             detectScreen();
         });
 
-        // Enter key support
         document.getElementById('searchInput').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                console.log("⌨️ Enter pressed");
-                performSearch();
-            }
+            if (e.key === 'Enter') performSearch();
         });
-
-        console.log("✅ All scripts initialized");
     </script>
 </body>
 </html>

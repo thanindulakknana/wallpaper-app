@@ -15,7 +15,7 @@ app.get('/', (req, res) => {
 });
 
 app.get('/api/search', async (req, res) => {
-    const { query, screenWidth, screenHeight } = req.query;
+    const { query, screenWidth, screenHeight, page = 1 } = req.query;
 
     if (!query) {
         return res.status(400).json({ error: 'Search query is required' });
@@ -28,29 +28,32 @@ app.get('/api/search', async (req, res) => {
     try {
         const userWidth = parseInt(screenWidth) || 1600;
         const userHeight = parseInt(screenHeight) || 900;
-        const userAspectRatio = userWidth / userHeight; // 1.777 (16:9)
+        const userAspectRatio = userWidth / userHeight;
+        const currentPage = parseInt(page) || 1;
         
-        console.log(`📐 User: ${userWidth}×${userHeight}, Aspect: ${userAspectRatio.toFixed(3)}`);
+        console.log(`📐 User: ${userWidth}×${userHeight}, Aspect: ${userAspectRatio.toFixed(3)}, Page: ${currentPage}`);
 
+        // Fetch up to 200 images per page from Pixabay
         const response = await axios.get('https://pixabay.com/api/', {
             params: {
                 key: process.env.PIXABAY_API_KEY,
                 q: query,
-                per_page: 200,
+                per_page: 200,  // Max allowed by Pixabay
+                page: currentPage,
                 image_type: 'photo',
                 safesearch: true
             }
         });
 
-        // SCORE each image by:
-        // 1. Aspect ratio match (most important)
-        // 2. Resolution match (secondary)
+        console.log(`📦 Pixabay returned ${response.data.hits.length} images (Total: ${response.data.totalHits})`);
+
+        // Score each image by aspect ratio and resolution
         const scoredResults = response.data.hits.map(image => {
             const imgWidth = image.imageWidth;
             const imgHeight = image.imageHeight;
             const imgAspectRatio = imgWidth / imgHeight;
             
-            // Aspect ratio must be within 5% of user's
+            // Aspect ratio match (most important)
             const aspectMatch = Math.abs(imgAspectRatio - userAspectRatio) / userAspectRatio;
             const aspectScore = Math.max(0, 1 - aspectMatch);
             
@@ -66,25 +69,39 @@ app.get('/api/search', async (req, res) => {
             if (sizeDiff < 100) totalScore += 0.3;
             else if (sizeDiff < 300) totalScore += 0.15;
             
+            // Determine match quality
+            let matchQuality = '';
+            if (aspectMatch < 0.01) matchQuality = 'perfect';
+            else if (aspectMatch < 0.03) matchQuality = 'excellent';
+            else if (aspectMatch < 0.05) matchQuality = 'good';
+            else if (aspectMatch < 0.10) matchQuality = 'acceptable';
+            else matchQuality = 'poor';
+            
             return {
                 ...image,
-                score: Math.round(totalScore * 100),
+                score: Math.round(Math.min(totalScore * 100, 100)),
                 aspectRatio: imgAspectRatio,
+                matchQuality: matchQuality,
                 isExactAspect: aspectMatch < 0.03
             };
         });
 
-        // Sort by score
+        // Sort by score (highest first)
         scoredResults.sort((a, b) => b.score - a.score);
 
-        // Take top 20
-        const topResults = scoredResults.slice(0, 20);
+        // ✅ SHOW ALL RESULTS (no slice limit)
+        const allResults = scoredResults;
+
+        console.log(`✅ Returning ${allResults.length} matching wallpapers`);
 
         res.json({
-            total: scoredResults.length,
-            wallpapers: topResults,
+            total: response.data.totalHits || allResults.length,
+            returned: allResults.length,
+            wallpapers: allResults,
             yourResolution: `${userWidth}×${userHeight}`,
-            yourAspectRatio: userAspectRatio.toFixed(3)
+            yourAspectRatio: userAspectRatio.toFixed(3),
+            page: currentPage,
+            hasMore: allResults.length >= 200
         });
 
     } catch (error) {
