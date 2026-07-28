@@ -2,12 +2,18 @@ require('dotenv').config();
 const express = require('express');
 const axios = require('axios');
 const cors = require('cors');
+const path = require('path');
 
 const app = express();
 
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// ✅ NEW: Serve the main page
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
 
 // Serve static files from 'public' folder
 app.use(express.static('public'));
@@ -50,5 +56,4 @@ app.get('/health', (req, res) => {
     res.status(200).json({ status: 'ok' });
 });
 
-// ✅ IMPORTANT: Export the app for Vercel (NO app.listen)
 module.exports = app;
