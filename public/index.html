@@ -8,7 +8,8 @@
         body { font-family: Arial, sans-serif; background: #121212; color: white; padding: 20px; }
         .container { max-width: 1200px; margin: 0 auto; }
         .search-box { display: flex; gap: 10px; margin-bottom: 30px; flex-wrap: wrap; }
-        input { flex: 1; padding: 15px; border: none; border-radius: 8px; font-size: 16px; min-width: 200px; }
+        input { flex: 1; padding: 15px; border: none; border-radius: 8px; font-size: 16px; min-width: 200px; background: #2a2a2a; color: white; }
+        input::placeholder { color: #888; }
         button { padding: 15px 30px; background: #4CAF50; color: white; border: none; border-radius: 8px; font-size: 16px; cursor: pointer; }
         button:hover { background: #45a049; }
         .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 15px; }
@@ -73,6 +74,20 @@
             margin-top: 5px;
             color: #888;
         }
+        .tags {
+            font-size: 11px;
+            color: #666;
+            margin-top: 5px;
+            word-wrap: break-word;
+            max-height: 30px;
+            overflow: hidden;
+        }
+        .no-results {
+            text-align: center;
+            padding: 50px 20px;
+            color: #888;
+        }
+        .no-results h3 { color: #fff; }
     </style>
 </head>
 <body>
@@ -89,7 +104,7 @@
         </div>
         
         <div class="search-box">
-            <input type="text" id="searchInput" placeholder="Search wallpapers..." />
+            <input type="text" id="searchInput" placeholder="Search wallpapers... (e.g., nissan gtr r34)" />
             <button onclick="performSearch()">🔍 Search</button>
         </div>
 
@@ -98,7 +113,8 @@
             <span onclick="setSearch('city')">🏙️ City</span> | 
             <span onclick="setSearch('car')">🚗 Car</span> | 
             <span onclick="setSearch('abstract')">🎨 Abstract</span> | 
-            <span onclick="setSearch('space')">🚀 Space</span>
+            <span onclick="setSearch('space')">🚀 Space</span> |
+            <span onclick="setSearch('nissan skyline r34 gtr')">🏎️ Nissan GTR</span>
         </div>
 
         <div id="results" class="grid"></div>
@@ -106,42 +122,62 @@
     </div>
 
     <script>
-        console.log("✅ Script loaded");
+        console.log("✅ Smart Wallpaper Finder loaded");
 
+        // ============================================
+        // SCREEN DETECTION (FIXED)
+        // ============================================
         function detectScreen() {
+            console.log("📱 Detecting screen...");
+            
             const screenWidth = screen.width;
             const screenHeight = screen.height;
             
+            // Use the actual screen resolution (no scaling adjustments)
+            // This gets the TRUE physical resolution
             let effectiveWidth = screenWidth;
             let effectiveHeight = screenHeight;
             
-            // Fix common Windows scaling issues
-            const resolutionMap = {
-                '1680:1050': { width: 1600, height: 900 },
-                '1920:1200': { width: 1920, height: 1080 },
-                '1366:768': { width: 1366, height: 768 },
-                '1440:900': { width: 1440, height: 900 },
-                '2560:1600': { width: 2560, height: 1440 }
-            };
+            // If Windows scaling is causing issues, let user fix it manually
+            // Show warning if resolution seems unusual
+            const commonResolutions = [
+                [1920, 1080], [1600, 900], [1366, 768], [1280, 720],
+                [3840, 2160], [2560, 1440], [3440, 1440], [1680, 1050]
+            ];
             
-            const key = `${effectiveWidth}:${effectiveHeight}`;
-            if (resolutionMap[key]) {
-                effectiveWidth = resolutionMap[key].width;
-                effectiveHeight = resolutionMap[key].height;
-                document.getElementById('resolutionWarning').style.display = 'block';
+            let isCommon = false;
+            for (let i = 0; i < commonResolutions.length; i++) {
+                if (screenWidth === commonResolutions[i][0] && screenHeight === commonResolutions[i][1]) {
+                    isCommon = true;
+                    break;
+                }
             }
             
+            if (!isCommon) {
+                document.getElementById('resolutionWarning').style.display = 'block';
+                document.getElementById('resolutionWarning').innerHTML = 
+                    `⚠️ Unusual resolution detected (${screenWidth}×${screenHeight}). Please use the manual override above if this is incorrect.`;
+            }
+            
+            // Store in global variables
             window.SCREEN_WIDTH = effectiveWidth;
             window.SCREEN_HEIGHT = effectiveHeight;
             window.RESOLUTION_OVERRIDE = false;
             
+            // Update display
             document.getElementById('detectedResolution').innerHTML = 
-                `<strong>${effectiveWidth} × ${effectiveHeight}</strong> (Reported: ${screenWidth}×${screenHeight})`;
+                `<strong>${effectiveWidth} × ${effectiveHeight}</strong> pixels`;
             
+            console.log(`✅ Screen detected: ${effectiveWidth}×${effectiveHeight}`);
             return { width: effectiveWidth, height: effectiveHeight };
         }
 
+        // ============================================
+        // MANUAL RESOLUTION OVERRIDE
+        // ============================================
         function manualResolution() {
+            console.log("📝 Manual override triggered");
+            
             const width = prompt("Enter your actual screen width (e.g., 1600):");
             if (!width) return;
             const height = prompt("Enter your actual screen height (e.g., 900):");
@@ -151,7 +187,7 @@
             const h = parseInt(height);
             
             if (isNaN(w) || isNaN(h) || w < 1 || h < 1) {
-                alert("Please enter valid numbers!");
+                alert("❌ Please enter valid numbers!");
                 return;
             }
             
@@ -163,21 +199,28 @@
                 `<strong>${w} × ${h}</strong> <span style="color:#ffa500;">(Manual override)</span>`;
             document.getElementById('resolutionWarning').style.display = 'none';
             
-            alert(`✅ Resolution set to ${w}×${h}`);
+            console.log(`✅ Manual override: ${w}×${h}`);
             
             const searchInput = document.getElementById('searchInput');
             if (searchInput.value.trim()) {
                 performSearch();
             } else {
                 searchInput.focus();
+                searchInput.placeholder = "Now search for wallpapers!";
             }
         }
 
+        // ============================================
+        // SET SEARCH
+        // ============================================
         function setSearch(term) {
             document.getElementById('searchInput').value = term;
             performSearch();
         }
 
+        // ============================================
+        // SEARCH FUNCTION (IMPROVED)
+        // ============================================
         async function performSearch() {
             const query = document.getElementById('searchInput').value.trim();
             if (!query) {
@@ -185,16 +228,20 @@
                 return;
             }
 
+            console.log(`🔍 Searching for: "${query}"`);
+
             const resultsContainer = document.getElementById('results');
             const statusMsg = document.getElementById('statusMessage');
             
             resultsContainer.innerHTML = '';
-            statusMsg.innerHTML = '⏳ Searching...';
+            statusMsg.innerHTML = '⏳ Searching for wallpapers...';
             statusMsg.className = 'status loading';
 
             try {
                 const width = window.SCREEN_WIDTH || screen.width;
                 const height = window.SCREEN_HEIGHT || screen.height;
+                
+                console.log(`📐 Using resolution: ${width}×${height}`);
 
                 const response = await fetch(
                     `/api/search?query=${encodeURIComponent(query)}&screenWidth=${width}&screenHeight=${height}`
@@ -208,42 +255,53 @@
                 }
 
                 if (!data.wallpapers || data.wallpapers.length === 0) {
-                    statusMsg.innerHTML = `😕 No wallpapers found for your ${width}×${height} screen. Try a broader search.`;
+                    statusMsg.innerHTML = `😕 No wallpapers found for "${query}". Try a broader search.`;
                     statusMsg.className = 'status error';
                     return;
                 }
 
-                statusMsg.innerHTML = `✅ ${data.message || `Showing ${data.wallpapers.length} results`}`;
+                statusMsg.innerHTML = `✅ Found ${data.wallpapers.length} wallpapers for "${query}"`;
                 statusMsg.className = 'status success';
 
+                // Display results
                 data.wallpapers.forEach(img => {
                     const card = document.createElement('div');
                     card.className = 'card';
                     
-                    // Determine match quality
+                    // ============================================
+                    // FIXED: Match quality based on ASPECT RATIO
+                    // ============================================
+                    const userAspectRatio = width / height;
+                    const imgAspectRatio = img.imageWidth / img.imageHeight;
+                    const aspectDiff = Math.abs(imgAspectRatio - userAspectRatio) / userAspectRatio;
+                    
+                    // Resolution difference for display only
                     const widthDiff = Math.abs(img.imageWidth - width);
                     const heightDiff = Math.abs(img.imageHeight - height);
-                    const totalDiff = widthDiff + heightDiff;
                     
                     let matchLabel = '';
                     let matchClass = '';
                     
-                    if (img.imageWidth === width && img.imageHeight === height) {
-                        matchLabel = '⭐ Exact Match!';
+                    // Score based on aspect ratio match (most important)
+                    if (aspectDiff < 0.01) {
+                        matchLabel = '⭐ Perfect 16:9!';
                         matchClass = 'match-excellent';
-                    } else if (totalDiff < 200) {
+                    } else if (aspectDiff < 0.03) {
                         matchLabel = '✅ Very Close';
                         matchClass = 'match-excellent';
-                    } else if (totalDiff < 500) {
+                    } else if (aspectDiff < 0.05) {
                         matchLabel = '👍 Good Match';
                         matchClass = 'match-good';
-                    } else if (totalDiff < 1000) {
-                        matchLabel = '📏 Close Enough';
+                    } else if (aspectDiff < 0.10) {
+                        matchLabel = '📏 Acceptable';
                         matchClass = 'match-fair';
                     } else {
-                        matchLabel = '📐 Different Size';
+                        matchLabel = '❌ Wrong Ratio';
                         matchClass = 'match-fair';
                     }
+                    
+                    // Show tags (what the image is actually tagged as)
+                    const tags = img.tags ? img.tags.split(', ').slice(0, 5).join(', ') : 'No tags';
                     
                     card.innerHTML = `
                         <img src="${img.webformatURL}" alt="${img.tags}" loading="lazy" 
@@ -252,25 +310,40 @@
                         <p>
                             <span class="resolution-badge">📐 ${img.imageWidth} × ${img.imageHeight}</span>
                             <span class="match-badge ${matchClass}">${matchLabel}</span>
-                            <br />❤️ ${img.likes} | 👁️ ${img.views}
-                            <br /><span class="match-info">${Math.round(img.score * 100)}% match</span>
+                            <br />❤️ ${img.likes} | 👁️ ${img.views} | ⬇️ ${img.downloads || 0}
+                            <br /><span class="match-info">Tags: ${tags}</span>
                         </p>
                         <a href="${img.webformatURL}" download target="_blank" class="download-btn">⬇️ Download Wallpaper</a>
                     `;
                     resultsContainer.appendChild(card);
                 });
 
+                console.log(`✅ Displayed ${data.wallpapers.length} results`);
+
             } catch (error) {
+                console.error('❌ Search error:', error);
                 statusMsg.innerHTML = '❌ Connection error. Please try again.';
                 statusMsg.className = 'status error';
-                console.error(error);
             }
         }
 
-        window.addEventListener('DOMContentLoaded', detectScreen);
-        document.getElementById('searchInput').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') performSearch();
+        // ============================================
+        // RUN ON PAGE LOAD
+        // ============================================
+        window.addEventListener('DOMContentLoaded', function() {
+            console.log("📄 Page loaded");
+            detectScreen();
         });
+
+        // Enter key support
+        document.getElementById('searchInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                console.log("⌨️ Enter pressed");
+                performSearch();
+            }
+        });
+
+        console.log("✅ All scripts initialized");
     </script>
 </body>
 </html>

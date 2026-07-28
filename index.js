@@ -6,7 +6,6 @@ const path = require('path');
 
 const app = express();
 
-// Middleware
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
@@ -27,9 +26,9 @@ app.get('/api/search', async (req, res) => {
     }
 
     try {
-        const userWidth = parseInt(screenWidth) || 1920;
-        const userHeight = parseInt(screenHeight) || 1080;
-        const userAspectRatio = userWidth / userHeight;
+        const userWidth = parseInt(screenWidth) || 1600;
+        const userHeight = parseInt(screenHeight) || 900;
+        const userAspectRatio = userWidth / userHeight; // 1.777 (16:9)
         
         console.log(`📐 User: ${userWidth}×${userHeight}, Aspect: ${userAspectRatio.toFixed(3)}`);
 
@@ -43,53 +42,49 @@ app.get('/api/search', async (req, res) => {
             }
         });
 
-        // STEP 1: Score each image
+        // SCORE each image by:
+        // 1. Aspect ratio match (most important)
+        // 2. Resolution match (secondary)
         const scoredResults = response.data.hits.map(image => {
             const imgWidth = image.imageWidth;
             const imgHeight = image.imageHeight;
             const imgAspectRatio = imgWidth / imgHeight;
             
-            // Calculate scores
-            const aspectScore = 1 - Math.abs(imgAspectRatio - userAspectRatio) / userAspectRatio;
+            // Aspect ratio must be within 5% of user's
+            const aspectMatch = Math.abs(imgAspectRatio - userAspectRatio) / userAspectRatio;
+            const aspectScore = Math.max(0, 1 - aspectMatch);
+            
+            // Resolution match
             const widthScore = Math.min(imgWidth / userWidth, 1);
             const heightScore = Math.min(imgHeight / userHeight, 1);
             
-            // Combined score: prioritize aspect ratio match
-            let totalScore = (aspectScore * 0.4) + (widthScore * 0.3) + (heightScore * 0.3);
+            // Combined score
+            let totalScore = (aspectScore * 0.6) + (widthScore * 0.2) + (heightScore * 0.2);
             
-            // Penalty for being too large (over 2x)
-            if (imgWidth > userWidth * 2 || imgHeight > userHeight * 2) {
-                totalScore *= 0.7;
-            }
-            
-            // Bonus for being close to exact resolution
+            // Bonus for exact or very close resolution
             const sizeDiff = Math.abs(imgWidth - userWidth) + Math.abs(imgHeight - userHeight);
-            const bonus = Math.max(0, 1 - sizeDiff / (userWidth + userHeight));
-            totalScore += bonus * 0.1;
+            if (sizeDiff < 100) totalScore += 0.3;
+            else if (sizeDiff < 300) totalScore += 0.15;
             
             return {
                 ...image,
-                score: totalScore,
+                score: Math.round(totalScore * 100),
                 aspectRatio: imgAspectRatio,
-                isPerfectMatch: imgWidth === userWidth && imgHeight === userHeight
+                isExactAspect: aspectMatch < 0.03
             };
         });
 
-        // STEP 2: Sort by score (highest first)
+        // Sort by score
         scoredResults.sort((a, b) => b.score - a.score);
 
-        // STEP 3: Take top 20
+        // Take top 20
         const topResults = scoredResults.slice(0, 20);
-
-        console.log(`✅ Found ${topResults.length} best matches`);
 
         res.json({
             total: scoredResults.length,
             wallpapers: topResults,
             yourResolution: `${userWidth}×${userHeight}`,
-            message: topResults.length > 0 ? 
-                `Showing the best matches for your ${userWidth}×${userHeight} screen` : 
-                `No wallpapers found for ${userWidth}×${userHeight}`
+            yourAspectRatio: userAspectRatio.toFixed(3)
         });
 
     } catch (error) {
