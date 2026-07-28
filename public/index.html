@@ -95,31 +95,56 @@
         // SCREEN RESOLUTION DETECTION
         // ============================================
         function detectScreen() {
-            console.log("🔍 Detecting screen...");
-            
-            const screenWidth = window.screen.width;
-            const screenHeight = window.screen.height;
-            const pixelRatio = window.devicePixelRatio || 1;
-            
-            // Calculate effective resolution
-            const effectiveWidth = Math.round(screenWidth * pixelRatio);
-            const effectiveHeight = Math.round(screenHeight * pixelRatio);
-            
-            // Store in global variables
-            window.SCREEN_WIDTH = effectiveWidth;
-            window.SCREEN_HEIGHT = effectiveHeight;
-            window.RESOLUTION_OVERRIDE = false;
-            
-            // Update display
-            const displayElement = document.getElementById('detectedResolution');
-            if (displayElement) {
-                displayElement.innerHTML = 
-                    `<strong>${effectiveWidth} × ${effectiveHeight}</strong> pixels (Physical: ${screenWidth}×${screenHeight}, DPR: ${pixelRatio}x)`;
-                console.log(`✅ Detected: ${effectiveWidth}×${effectiveHeight}`);
-            }
-            
-            return { width: effectiveWidth, height: effectiveHeight };
+    console.log("🔍 Detecting screen...");
+    
+    // Method 1: Use window.screen (most reliable)
+    const screenWidth = window.screen.width;
+    const screenHeight = window.screen.height;
+    const pixelRatio = window.devicePixelRatio || 1;
+    
+    // Method 2: Use window.screen.availWidth (excludes taskbar)
+    const availWidth = window.screen.availWidth;
+    const availHeight = window.screen.availHeight;
+    
+    // Calculate effective resolution
+    let effectiveWidth = Math.round(screenWidth * pixelRatio);
+    let effectiveHeight = Math.round(screenHeight * pixelRatio);
+    
+    // Check if Windows scaling is causing issues
+    // If the detected resolution is significantly different from common resolutions
+    const commonResolutions = [
+        [1920, 1080], [1600, 900], [1366, 768], [1280, 720], 
+        [3840, 2160], [2560, 1440], [3440, 1440]
+    ];
+    
+    let found = false;
+    for (let i = 0; i < commonResolutions.length; i++) {
+        const [cw, ch] = commonResolutions[i];
+        // If within 5% of a common resolution, use that instead
+        if (Math.abs(effectiveWidth - cw) / cw < 0.05 && Math.abs(effectiveHeight - ch) / ch < 0.05) {
+            effectiveWidth = cw;
+            effectiveHeight = ch;
+            found = true;
+            console.log(`🔧 Adjusted to common resolution: ${cw}×${ch}`);
+            break;
         }
+    }
+    
+    // Store in global variables
+    window.SCREEN_WIDTH = effectiveWidth;
+    window.SCREEN_HEIGHT = effectiveHeight;
+    window.RESOLUTION_OVERRIDE = false;
+    
+    // Update display
+    const displayElement = document.getElementById('detectedResolution');
+    if (displayElement) {
+        displayElement.innerHTML = 
+            `<strong>${effectiveWidth} × ${effectiveHeight}</strong> pixels (Physical: ${screenWidth}×${screenHeight}, DPR: ${pixelRatio}x)`;
+        console.log(`✅ Detected: ${effectiveWidth}×${effectiveHeight}`);
+    }
+    
+    return { width: effectiveWidth, height: effectiveHeight };
+}
 
         // ============================================
         // MANUAL RESOLUTION OVERRIDE
