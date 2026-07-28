@@ -9,16 +9,12 @@ const app = express();
 // Middleware
 app.use(cors());
 app.use(express.json());
-
-// Serve static files from 'public' folder
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Root route - serves index.html
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// API Route: Search for wallpapers
 app.get('/api/search', async (req, res) => {
     const { query, screenWidth, screenHeight } = req.query;
 
@@ -33,11 +29,9 @@ app.get('/api/search', async (req, res) => {
     try {
         const userWidth = parseInt(screenWidth) || 1920;
         const userHeight = parseInt(screenHeight) || 1080;
-        
-        // Calculate user's aspect ratio (e.g., 16:9, 16:10, etc.)
         const userAspectRatio = userWidth / userHeight;
         
-        console.log(`📐 User resolution: ${userWidth}×${userHeight}, Aspect Ratio: ${userAspectRatio.toFixed(3)}`);
+        console.log(`📐 User: ${userWidth}×${userHeight}, Aspect: ${userAspectRatio.toFixed(3)}`);
 
         const response = await axios.get('https://pixabay.com/api/', {
             params: {
@@ -49,44 +43,53 @@ app.get('/api/search', async (req, res) => {
             }
         });
 
-        // STEP 1: Filter images
-        const filteredResults = response.data.hits.filter(image => {
+        // STEP 1: Score each image
+        const scoredResults = response.data.hits.map(image => {
             const imgWidth = image.imageWidth;
             const imgHeight = image.imageHeight;
             const imgAspectRatio = imgWidth / imgHeight;
             
-            // ✅ Condition 1: Image must be at least as large as user's screen
-            const isLargeEnough = imgWidth >= userWidth && imgHeight >= userHeight;
+            // Calculate scores
+            const aspectScore = 1 - Math.abs(imgAspectRatio - userAspectRatio) / userAspectRatio;
+            const widthScore = Math.min(imgWidth / userWidth, 1);
+            const heightScore = Math.min(imgHeight / userHeight, 1);
             
-            // ✅ Condition 2: Aspect ratio must match within 5% tolerance
-            const aspectRatioMatch = Math.abs(imgAspectRatio - userAspectRatio) < 0.05;
+            // Combined score: prioritize aspect ratio match
+            let totalScore = (aspectScore * 0.4) + (widthScore * 0.3) + (heightScore * 0.3);
             
-            // ✅ Condition 3: Image shouldn't be TOO large (max 2x the user's resolution)
-            const isNotTooLarge = imgWidth <= userWidth * 2 && imgHeight <= userHeight * 2;
+            // Penalty for being too large (over 2x)
+            if (imgWidth > userWidth * 2 || imgHeight > userHeight * 2) {
+                totalScore *= 0.7;
+            }
             
-            // ✅ Condition 4: Prefer images that are closer to user's resolution
+            // Bonus for being close to exact resolution
             const sizeDiff = Math.abs(imgWidth - userWidth) + Math.abs(imgHeight - userHeight);
+            const bonus = Math.max(0, 1 - sizeDiff / (userWidth + userHeight));
+            totalScore += bonus * 0.1;
             
-            return isLargeEnough && aspectRatioMatch && isNotTooLarge;
+            return {
+                ...image,
+                score: totalScore,
+                aspectRatio: imgAspectRatio,
+                isPerfectMatch: imgWidth === userWidth && imgHeight === userHeight
+            };
         });
 
-        // STEP 2: Sort by closest match to user's resolution
-        filteredResults.sort((a, b) => {
-            const aDiff = Math.abs(a.imageWidth - userWidth) + Math.abs(a.imageHeight - userHeight);
-            const bDiff = Math.abs(b.imageWidth - userWidth) + Math.abs(b.imageHeight - userHeight);
-            return aDiff - bDiff;
-        });
+        // STEP 2: Sort by score (highest first)
+        scoredResults.sort((a, b) => b.score - a.score);
 
-        // STEP 3: Take top 20 results
-        const topResults = filteredResults.slice(0, 20);
+        // STEP 3: Take top 20
+        const topResults = scoredResults.slice(0, 20);
 
-        console.log(`✅ Found ${filteredResults.length} matching wallpapers, showing ${topResults.length}`);
+        console.log(`✅ Found ${topResults.length} best matches`);
 
         res.json({
-            total: filteredResults.length,
+            total: scoredResults.length,
             wallpapers: topResults,
             yourResolution: `${userWidth}×${userHeight}`,
-            aspectRatio: userAspectRatio.toFixed(3)
+            message: topResults.length > 0 ? 
+                `Showing the best matches for your ${userWidth}×${userHeight} screen` : 
+                `No wallpapers found for ${userWidth}×${userHeight}`
         });
 
     } catch (error) {
@@ -98,7 +101,6 @@ app.get('/api/search', async (req, res) => {
     }
 });
 
-// Health check endpoint
 app.get('/health', (req, res) => {
     res.status(200).json({ 
         status: 'ok',
@@ -106,10 +108,8 @@ app.get('/health', (req, res) => {
     });
 });
 
-// Export for Vercel
 module.exports = app;
 
-// Start server locally
 if (require.main === module) {
     const PORT = process.env.PORT || 3000;
     app.listen(PORT, () => {

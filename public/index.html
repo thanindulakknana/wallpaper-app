@@ -42,10 +42,11 @@
             padding: 2px 10px; 
             border-radius: 10px; 
             font-size: 11px; 
-            background: #2e7d32; 
-            color: #a5d6a7; 
             margin-left: 5px;
         }
+        .match-excellent { background: #1b5e20; color: #a5d6a7; }
+        .match-good { background: #e65100; color: #ffcc80; }
+        .match-fair { background: #b71c1c; color: #ffcdd2; }
         .search-examples {
             color: #888;
             font-size: 13px;
@@ -67,6 +68,11 @@
             margin-top: 10px;
             display: none;
         }
+        .match-info {
+            font-size: 12px;
+            margin-top: 5px;
+            color: #888;
+        }
     </style>
 </head>
 <body>
@@ -74,7 +80,7 @@
         <h1>🖥️ Smart Wallpaper Finder</h1>
         
         <div class="resolution-info">
-            📱 <strong>Detected Screen Resolution:</strong> <span id="detectedResolution">Loading...</span>
+            📱 <strong>Your Screen Resolution:</strong> <span id="detectedResolution">Loading...</span>
             <br />
             <small>If this is incorrect, <span class="manual-link" onclick="manualResolution()">click here to set it manually</span></small>
             <div id="resolutionWarning" class="resolution-warning">
@@ -83,7 +89,7 @@
         </div>
         
         <div class="search-box">
-            <input type="text" id="searchInput" placeholder="Search wallpapers... (e.g., mountains, sunset, car)" />
+            <input type="text" id="searchInput" placeholder="Search wallpapers..." />
             <button onclick="performSearch()">🔍 Search</button>
         </div>
 
@@ -100,66 +106,44 @@
     </div>
 
     <script>
-        console.log("✅ Script loaded successfully");
+        console.log("✅ Script loaded");
 
-        // ============================================
-        // SCREEN RESOLUTION DETECTION - FIXED
-        // ============================================
         function detectScreen() {
-            console.log("🔍 Detecting screen...");
+            const screenWidth = screen.width;
+            const screenHeight = screen.height;
             
-            // Get the actual display size
-            const screenWidth = window.screen.width;
-            const screenHeight = window.screen.height;
-            
-            // For Windows scaling issues, try to get the true resolution
-            // Check if it's a common resolution being misreported
             let effectiveWidth = screenWidth;
             let effectiveHeight = screenHeight;
             
-            // Common resolutions and their misreported versions due to scaling
+            // Fix common Windows scaling issues
             const resolutionMap = {
                 '1680:1050': { width: 1600, height: 900 },
                 '1920:1200': { width: 1920, height: 1080 },
                 '1366:768': { width: 1366, height: 768 },
                 '1440:900': { width: 1440, height: 900 },
-                '2560:1600': { width: 2560, height: 1440 },
-                '3840:2400': { width: 3840, height: 2160 }
+                '2560:1600': { width: 2560, height: 1440 }
             };
             
             const key = `${effectiveWidth}:${effectiveHeight}`;
             if (resolutionMap[key]) {
-                console.log(`🔧 Adjusting ${effectiveWidth}×${effectiveHeight} → ${resolutionMap[key].width}×${resolutionMap[key].height}`);
                 effectiveWidth = resolutionMap[key].width;
                 effectiveHeight = resolutionMap[key].height;
                 document.getElementById('resolutionWarning').style.display = 'block';
             }
             
-            // Store in global variables
             window.SCREEN_WIDTH = effectiveWidth;
             window.SCREEN_HEIGHT = effectiveHeight;
             window.RESOLUTION_OVERRIDE = false;
             
-            // Update display
-            const displayElement = document.getElementById('detectedResolution');
-            if (displayElement) {
-                displayElement.innerHTML = 
-                    `<strong>${effectiveWidth} × ${effectiveHeight}</strong> pixels (Reported: ${screenWidth}×${screenHeight})`;
-                console.log(`✅ Using resolution: ${effectiveWidth}×${effectiveHeight}`);
-            }
+            document.getElementById('detectedResolution').innerHTML = 
+                `<strong>${effectiveWidth} × ${effectiveHeight}</strong> (Reported: ${screenWidth}×${screenHeight})`;
             
             return { width: effectiveWidth, height: effectiveHeight };
         }
 
-        // ============================================
-        // MANUAL RESOLUTION OVERRIDE
-        // ============================================
         function manualResolution() {
-            console.log("📝 Manual override triggered");
-            
             const width = prompt("Enter your actual screen width (e.g., 1600):");
             if (!width) return;
-            
             const height = prompt("Enter your actual screen height (e.g., 900):");
             if (!height) return;
             
@@ -167,52 +151,34 @@
             const h = parseInt(height);
             
             if (isNaN(w) || isNaN(h) || w < 1 || h < 1) {
-                alert("❌ Please enter valid numbers!");
+                alert("Please enter valid numbers!");
                 return;
             }
             
-            // Override the resolution
             window.SCREEN_WIDTH = w;
             window.SCREEN_HEIGHT = h;
             window.RESOLUTION_OVERRIDE = true;
             
-            // Update display
-            const displayElement = document.getElementById('detectedResolution');
-            if (displayElement) {
-                displayElement.innerHTML = 
-                    `<strong>${w} × ${h}</strong> pixels <span style="color:#ffa500;">(Manual override)</span>`;
-                console.log(`✅ Manual override set to: ${w}×${h}`);
-            }
-            
-            // Hide warning
+            document.getElementById('detectedResolution').innerHTML = 
+                `<strong>${w} × ${h}</strong> <span style="color:#ffa500;">(Manual override)</span>`;
             document.getElementById('resolutionWarning').style.display = 'none';
             
-            alert(`✅ Screen resolution set to ${w}×${h}`);
+            alert(`✅ Resolution set to ${w}×${h}`);
             
-            // Auto-search if there's a search term
             const searchInput = document.getElementById('searchInput');
             if (searchInput.value.trim()) {
                 performSearch();
             } else {
                 searchInput.focus();
-                searchInput.placeholder = "Now search for wallpapers!";
             }
         }
 
-        // ============================================
-        // SET SEARCH
-        // ============================================
         function setSearch(term) {
             document.getElementById('searchInput').value = term;
             performSearch();
         }
 
-        // ============================================
-        // SEARCH FUNCTION
-        // ============================================
         async function performSearch() {
-            console.log("🔍 Search function called");
-            
             const query = document.getElementById('searchInput').value.trim();
             if (!query) {
                 alert('Please enter a search term!');
@@ -223,52 +189,71 @@
             const statusMsg = document.getElementById('statusMessage');
             
             resultsContainer.innerHTML = '';
-            statusMsg.innerHTML = '⏳ Searching for wallpapers that match your screen...';
+            statusMsg.innerHTML = '⏳ Searching...';
             statusMsg.className = 'status loading';
 
             try {
                 const width = window.SCREEN_WIDTH || screen.width;
                 const height = window.SCREEN_HEIGHT || screen.height;
-                
-                console.log(`📐 Searching with resolution: ${width}×${height}`);
 
-                const apiUrl = `/api/search?query=${encodeURIComponent(query)}&screenWidth=${width}&screenHeight=${height}`;
-                const response = await fetch(apiUrl);
+                const response = await fetch(
+                    `/api/search?query=${encodeURIComponent(query)}&screenWidth=${width}&screenHeight=${height}`
+                );
                 const data = await response.json();
 
                 if (data.error) {
-                    statusMsg.innerHTML = '❌ Error: ' + data.error;
+                    statusMsg.innerHTML = '❌ ' + data.error;
                     statusMsg.className = 'status error';
                     return;
                 }
 
                 if (!data.wallpapers || data.wallpapers.length === 0) {
-                    statusMsg.innerHTML = `😕 No wallpapers found that match your ${width}×${height} screen. Try a broader search.`;
+                    statusMsg.innerHTML = `😕 No wallpapers found for your ${width}×${height} screen. Try a broader search.`;
                     statusMsg.className = 'status error';
                     return;
                 }
 
-                statusMsg.innerHTML = `✅ Found ${data.total} matching wallpapers for your ${width}×${height} screen. Showing ${data.wallpapers.length}.`;
+                statusMsg.innerHTML = `✅ ${data.message || `Showing ${data.wallpapers.length} results`}`;
                 statusMsg.className = 'status success';
 
                 data.wallpapers.forEach(img => {
                     const card = document.createElement('div');
                     card.className = 'card';
                     
-                    // Check if resolution is very close to user's screen
-                    const isPerfectMatch = Math.abs(img.imageWidth - width) < 100 && Math.abs(img.imageHeight - height) < 100;
-                    const isGoodMatch = Math.abs(img.imageWidth - width) < 200 && Math.abs(img.imageHeight - height) < 200;
+                    // Determine match quality
+                    const widthDiff = Math.abs(img.imageWidth - width);
+                    const heightDiff = Math.abs(img.imageHeight - height);
+                    const totalDiff = widthDiff + heightDiff;
                     
-                    let badge = '';
-                    if (isPerfectMatch) badge = '<span class="match-badge">⭐ Perfect Match</span>';
-                    else if (isGoodMatch) badge = '<span class="match-badge">✅ Good Match</span>';
+                    let matchLabel = '';
+                    let matchClass = '';
+                    
+                    if (img.imageWidth === width && img.imageHeight === height) {
+                        matchLabel = '⭐ Exact Match!';
+                        matchClass = 'match-excellent';
+                    } else if (totalDiff < 200) {
+                        matchLabel = '✅ Very Close';
+                        matchClass = 'match-excellent';
+                    } else if (totalDiff < 500) {
+                        matchLabel = '👍 Good Match';
+                        matchClass = 'match-good';
+                    } else if (totalDiff < 1000) {
+                        matchLabel = '📏 Close Enough';
+                        matchClass = 'match-fair';
+                    } else {
+                        matchLabel = '📐 Different Size';
+                        matchClass = 'match-fair';
+                    }
                     
                     card.innerHTML = `
-                        <img src="${img.webformatURL}" alt="${img.tags}" loading="lazy" onclick="window.open('${img.webformatURL}', '_blank')" title="Click to open full size" />
+                        <img src="${img.webformatURL}" alt="${img.tags}" loading="lazy" 
+                             onclick="window.open('${img.webformatURL}', '_blank')" 
+                             title="Click to open full size" />
                         <p>
                             <span class="resolution-badge">📐 ${img.imageWidth} × ${img.imageHeight}</span>
-                            ${badge}
-                            <br />❤️ ${img.likes} | 👁️ ${img.views} | ⬇️ ${img.downloads || 0}
+                            <span class="match-badge ${matchClass}">${matchLabel}</span>
+                            <br />❤️ ${img.likes} | 👁️ ${img.views}
+                            <br /><span class="match-info">${Math.round(img.score * 100)}% match</span>
                         </p>
                         <a href="${img.webformatURL}" download target="_blank" class="download-btn">⬇️ Download Wallpaper</a>
                     `;
@@ -276,25 +261,15 @@
                 });
 
             } catch (error) {
-                console.error('❌ Search error:', error);
-                statusMsg.innerHTML = '❌ Cannot connect to server. Please try again.';
+                statusMsg.innerHTML = '❌ Connection error. Please try again.';
                 statusMsg.className = 'status error';
+                console.error(error);
             }
         }
 
-        // ============================================
-        // RUN ON PAGE LOAD
-        // ============================================
-        window.addEventListener('DOMContentLoaded', function() {
-            console.log("📄 Page loaded, detecting screen...");
-            detectScreen();
-        });
-
-        // Enter key support
+        window.addEventListener('DOMContentLoaded', detectScreen);
         document.getElementById('searchInput').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                performSearch();
-            }
+            if (e.key === 'Enter') performSearch();
         });
     </script>
 </body>
